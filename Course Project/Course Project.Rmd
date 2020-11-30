@@ -1,0 +1,124 @@
+# Course Project - Practical Machine Learning: How Well Do People Exercise?
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Setup
+
+Before starting the analysis, it is important to clean up the environment, set the right working directory and load the packages you need for the analysis.
+```{r}
+rm(list=ls())
+getwd()
+setwd("~/Documents/1st year/Econometrics/R/Practical Machine Learning")
+
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+```
+
+## Downloading and Loading the Data
+
+The codes below download the file directly from the url.
+```{r}
+urltrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urltest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+download.file(urltrain, destfile="train.csv", method="curl")
+download.file(urltest, destfile="test.csv", method="curl")
+```
+
+Then, we can read in the data to the environment.
+```{r}
+train <- read.csv("train.csv", header=TRUE)
+test <- read.csv("test.csv", header=TRUE)
+```
+
+The loaded dataset looks like this.
+```{r}
+head(train)
+```
+
+```{r}
+head(test)
+```
+
+## Data Processing
+
+As the first step, we divide the train datset into two partitions using the classe variable with the training dataset containing 70% of the observations. Also, setting the seed is important for reproducibility of this analysis.
+```{r}
+set.seed(111)
+
+traincut  <- createDataPartition(train$classe, p=0.7, list=FALSE)
+trainingset <- train[traincut, ]
+testingset  <- train[-traincut, ]
+```
+
+With the nearZeroVar function, I removed the variables that contain close-to-zero variance, as it is likely that it is not helpful for the analysis.
+```{r}
+nzv <- nearZeroVar(trainingset)
+trainingset <- trainingset[, -nzv]
+testingset <- testingset[, -nzv]
+```
+
+Furthermore, I get rid of the variables whose values are NA for more than 95% of the observations.
+```{r}
+na <- sapply(trainingset, function(x) mean(is.na(x))) > 0.95
+trainingset <- trainingset[, na==FALSE]
+testingset  <- testingset[, na==FALSE]
+```
+
+Lastly, I also drop the first five variables that are mostly for identification of the subject.
+```{r}
+trainingset <- trainingset[, -(1:5)]
+testingset  <- testingset[, -(1:5)]
+```
+
+## Analysis
+
+1. Random Forest Model
+
+The first model I used is the Random Forest Model, and I also report the confusion matrix of the predicitons using the model and a bar plot showing the accuracy of the predictions.
+```{r}
+set.seed(111)
+control_rf <- trainControl(method="cv", number=3, verboseIter=FALSE)
+model_rf <- train(classe ~ ., data=trainingset, method="rf",
+                  trControl=control_rf)
+model_rf$finalModel
+```
+
+```{r}
+prediction_rf <- predict(model_rf, newdata=testingset)
+confusionmat_rf <- confusionMatrix(prediction_rf, as.factor(testingset$classe))
+confusionmat_rf
+```
+
+```{r}
+plot(confusionmat_rf$table, col = confusionmat_rf$byClass, 
+     main = paste("Accuracy with Random Forest Model =",
+                  round(confusionmat_rf$overall['Accuracy'], 4)))
+```
+
+2. Decision Tree Model
+
+Now I fit the data with the decision tree model.
+```{r}
+set.seed(111)
+model_dt <- rpart(classe ~ ., data=trainingset, method="class")
+fancyRpartPlot(model_dt)
+```
+
+```{r}
+prediction_dt <- predict(model_dt, newdata=testingset, type="class")
+confusionmat_dt <- confusionMatrix(prediction_dt, as.factor(testingset$classe))
+confusionmat_dt
+```
+
+```{r}
+plot(confusionmat_dt$table, col = confusionmat_dt$byClass, 
+     main = paste("Accuracy with Random Forest Model =",
+                  round(confusionmat_dt$overall['Accuracy'], 4)))
+```
+
